@@ -1,0 +1,8 @@
+# Requirements
+pandas
+numpy
+yfinance
+xgboost
+scikit-learn
+matplotlib
+plotly
