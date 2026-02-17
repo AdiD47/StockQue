@@ -2,10 +2,19 @@ import logging
 import pandas as pd
 import numpy as np
 import sys
+import os
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 from src.utils import setup_logging, download_data, plot_results
 from src.feature_engineering import FeatureEngineer
 from src.model import ModelTrainer
+
+# Load environment variables from .env file
+if load_dotenv():
+    pass # .env loaded successfully
+else:
+    # It's okay if .env is missing, we'll prompt the user later
+    pass
 
 def generate_prescriptive_analysis(ticker: str, current_price: float, predicted_price: float, fundamental_data: pd.Series):
     """
@@ -33,7 +42,8 @@ def generate_prescriptive_analysis(ticker: str, current_price: float, predicted_
         
     print(f"Action: {signal}")
     print(f"Reasoning: {reason}")
-    
+
+
     # 2. Fundamental Overlay (if available)
     print(f"\n--- Fundamental Context (CMIE Prowess Data) ---")
     try:
@@ -78,7 +88,14 @@ def main():
             print("No ticker provided. Exiting.")
             sys.exit(1)
             
-        PROWESS_KEY = input("Enter CMIE Prowess API Key (Press Enter to skip/mock): ").strip()
+        # Try to fetch from environment variable first
+        PROWESS_KEY = os.getenv("PROWESS_API_KEY")
+        if PROWESS_KEY:
+            print("Using Prowess API Key from environment (.env).")
+        else:
+            print("Tip: You can set PROWESS_API_KEY in a .env file to skip this step.")
+            PROWESS_KEY = input("Enter CMIE Prowess API Key (Press Enter to skip/mock): ").strip()
+
             
         START_DATE = (datetime.now() - timedelta(days=365*2)).strftime('%Y-%m-%d') # Last 2 years
         END_DATE = datetime.now().strftime('%Y-%m-%d')

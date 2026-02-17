@@ -27,6 +27,13 @@ The application is interactive and will ask you to input the ticker symbol of th
    pip install -r requirements.txt
    ```
 
+3. (Optional) Set up Environment Variables:
+   If you have a CMIE Prowess API key, you can store it in a `.env` file to avoid entering it every time.
+   ```bash
+   cp .env.example .env
+   # Edit .env and set PROWESS_API_KEY=your_key_here
+   ```
+
 ## Usage
 
 Run the main script:
@@ -37,6 +44,7 @@ You will be prompted to enter a stock ticker:
 ```text
 Enter the stock ticker (e.g., AAPL):
 ```
+If you haven't set up the `.env` file, you will also be prompted for the API key (press Enter to skip/mock).
 Enter a valid ticker symbol (e.g., `AAPL`, `MSFT`, `GOOGL`) and press Enter. The script will download the latest data, train the model, and display the prediction.
 
 ## Methodology

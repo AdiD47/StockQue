@@ -6,3 +6,4 @@ xgboost
 scikit-learn
 matplotlib
 plotly
+python-dotenv
