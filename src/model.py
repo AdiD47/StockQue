@@ -119,3 +119,15 @@ class ModelTrainer:
         df['Cumulative_Strategy_Return'] = np.exp(df['Cumulative_Strategy_Log'])
         
         return df
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        """
+        Predicts target for the given dataframe using the trained model.
+        """
+        if self.model is None:
+            raise ValueError("Model has not been trained yet.")
+            
+        X = df[self.feature_cols].values
+        X_scaled = self.scaler.transform(X)
+        
+        return self.model.predict(X_scaled)
