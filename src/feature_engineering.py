@@ -1,16 +1,18 @@
 import pandas as pd
 import numpy as np
 import logging
-from typing import List
+from typing import List, Optional
+from src.prowess_client import ProwessClient
 
 class FeatureEngineer:
     """
-    Handles feature engineering for stock data without external TA libraries.
+    Handles feature engineering including TA and Fundamental data.
     """
-    def __init__(self, target_col: str = 'Target_Log_Return'):
+    def __init__(self, target_col: str = 'Target_Log_Return', prowess_api_key: Optional[str] = None):
         self.target_col = target_col
         self.features: List[str] = []
         self.logger = logging.getLogger(__name__)
+        self.prowess_client = ProwessClient(api_key=prowess_api_key) if prowess_api_key else None
 
     def _calculate_rsi(self, series: pd.Series, period: int = 14) -> pd.Series:
         delta = series.diff()
@@ -46,7 +48,54 @@ class FeatureEngineer:
             f'BBU_{length}_{std}': upper
         })
 
-    def create_features(self, data: pd.DataFrame) -> pd.DataFrame:
+    def integrate_prowess_data(self, df: pd.DataFrame, ticker: str) -> pd.DataFrame:
+        """
+        Fetches and merges CMIE Prowess fundamental data with daily price data.
+        """
+        if not self.prowess_client:
+            return df
+            
+        try:
+            fund_df = self.prowess_client.fetch_fundamentals(ticker)
+            if fund_df.empty:
+                return df
+                
+            # Ensure indices are timezone-naive to avoid merge errors if one is tz-aware
+            df.index = df.index.tz_localize(None)
+            fund_df.index = fund_df.index.tz_localize(None)
+            
+            # Sort both for safe merging
+            df = df.sort_index()
+            fund_df = fund_df.sort_index()
+            
+            # Use merge_asof if available, or reindex and forward fill
+            # Since fundamental data is sparse (quarterly), we want to Propagate the LAST KNOWN fundamental value forward to daily records
+            # Create a Union index
+            combined_index = df.index.union(fund_df.index).sort_values()
+            
+            # Reindex fundamental data to this combined index and ffill
+            fund_df_daily = fund_df.reindex(combined_index).ffill()
+            
+            # Now join to the original price dataframe, keeping only price dates
+            df = df.join(fund_df_daily, how='left')
+            
+            fund_cols = ['PE_Ratio', 'EPS', 'ROE', 'Sales_Growth']
+            # Forward fill any remaining NaNs (e.g. if price data starts after fundamental data)
+            df[fund_cols] = df[fund_cols].ffill()
+            
+            # Add to feature list
+            for col in fund_cols:
+                if col not in self.features:
+                    self.features.append(col)
+                    
+            self.logger.info(f"Integrated {len(fund_cols)} fundamental features from Prowess.")
+            
+        except Exception as e:
+            self.logger.error(f"Error integrating prowess data: {e}")
+            
+        return df
+
+    def create_features(self, data: pd.DataFrame, ticker: Optional[str] = None) -> pd.DataFrame:
         """
         Generates technical indicators and lagged features.
         """
@@ -90,6 +139,10 @@ class FeatureEngineer:
         # Add dynamic TA columns
         ta_cols = [c for c in df.columns if 'MACD' in c or 'BBL' in c or 'BBM' in c or 'BBU' in c]
         self.features = base_features + ta_cols
+
+        # 6. Integrate Fundamental Data if ticker is provided
+        if ticker and self.prowess_client:
+             df = self.integrate_prowess_data(df, ticker)
 
         return df
 

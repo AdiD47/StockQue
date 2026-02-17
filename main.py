@@ -7,6 +7,69 @@ from src.utils import setup_logging, download_data, plot_results
 from src.feature_engineering import FeatureEngineer
 from src.model import ModelTrainer
 
+def generate_prescriptive_analysis(ticker: str, current_price: float, predicted_price: float, fundamental_data: pd.Series):
+    """
+    Generates a text-based prescriptive analysis based on price action and fundamentals.
+    """
+    log_return = np.log(predicted_price / current_price)
+    percent_change = (np.exp(log_return) - 1) * 100
+    
+    print(f"\n=== PRESCRIPTIVE ANALYSIS FOR {ticker} ===")
+    
+    # 1. Price Action Analysis
+    print(f"--- Technical Outlook ---")
+    if percent_change > 1.0:
+        signal = "STRONG BUY"
+        reason = f"Model predicts a significant upside of {percent_change:.2f}%."
+    elif percent_change > 0.0:
+        signal = "ACCUMULATE"
+        reason = f"Model predicts a moderate upside of {percent_change:.2f}%."
+    elif percent_change > -1.0:
+        signal = "HOLD"
+        reason = f"Model predicts slight consolidation ({percent_change:.2f}%)."
+    else:
+        signal = "SELL/AVOID"
+        reason = f"Model predicts a downside of {percent_change:.2f}%."
+        
+    print(f"Action: {signal}")
+    print(f"Reasoning: {reason}")
+    
+    # 2. Fundamental Overlay (if available)
+    print(f"\n--- Fundamental Context (CMIE Prowess Data) ---")
+    try:
+        pe = fundamental_data.get('PE_Ratio', float('nan'))
+        eps = fundamental_data.get('EPS', float('nan'))
+        roe = fundamental_data.get('ROE', float('nan'))
+        
+        if pd.isna(pe):
+            print("Fundamental data not fully available.")
+        else:
+            print(f"P/E Ratio: {pe:.2f}")
+            print(f"EPS: {eps:.2f}")
+            print(f"ROE: {roe:.2f}%")
+            
+            # Simple heuristic logic
+            if pe < 20 and roe > 15:
+                print("Valuation: UNDERVALUED (Low P/E, High ROE). Supports Bullish case.")
+            elif pe > 40:
+                print("Valuation: PREMIUM/OVERVALUED. Caution advised despite technical signals.")
+            else:
+                print("Valuation: FAIR. Performance depends on execution.")
+                
+    except Exception as e:
+        print(f"Could not parse fundamental data: {e}")
+
+    # 3. Strategy Recommendation
+    print(f"\n--- Strategic Recommendation ---")
+    if signal in ["STRONG BUY", "ACCUMULATE"]:
+        print(f"Consider entering long positions near ${current_price:.2f}.")
+        print(f"Set a Stop Loss at ${current_price * 0.95:.2f} (5% risk).")
+        print(f"Target Price: ${predicted_price:.2f}.")
+    elif signal == "HOLD":
+        print("Existing positions: Hold. New positions: Wait for breakout.")
+    else:
+        print("Reduce exposure. Consider shorting if trend confirms below support.")
+
 def main():
     # 1. Configuration
     try:
@@ -14,6 +77,8 @@ def main():
         if not TICKER:
             print("No ticker provided. Exiting.")
             sys.exit(1)
+            
+        PROWESS_KEY = input("Enter CMIE Prowess API Key (Press Enter to skip/mock): ").strip()
             
         START_DATE = (datetime.now() - timedelta(days=365*2)).strftime('%Y-%m-%d') # Last 2 years
         END_DATE = datetime.now().strftime('%Y-%m-%d')
@@ -29,9 +94,9 @@ def main():
         # 2. Data Ingestion
         df = download_data(TICKER, START_DATE, END_DATE)
         
-        # 3. Feature Engineering
-        fe = FeatureEngineer()
-        df_full = fe.create_features(df)
+        # 3. Feature Engineering (with Prowess integration)
+        fe = FeatureEngineer(prowess_api_key=PROWESS_KEY if PROWESS_KEY else "MOCK_KEY_FOR_DEMO")
+        df_full = fe.create_features(df, ticker=TICKER)
 
         # Extract the last row separately for tomorrow's prediction
         # The last row has features but NaN target (because target is next day's return)
@@ -68,15 +133,16 @@ def main():
         prediction_log_return = trainer.predict(last_row)[0]
         predicted_price = last_close * np.exp(prediction_log_return)
         
-        print(f"\n=== Prediction for {TICKER} ===")
-        print(f"Latest Close Price ({df.index[-1].date()}): ${last_close:.2f}")
-        print(f"Predicted Log Return: {prediction_log_return:.4f}")
-        print(f"Predicted Price for Next Trading Day: ${predicted_price:.2f}")
+        # --- Run Prescriptive Analysis ---
+        # Get fundamental cols safely
+        fund_data = last_row[['PE_Ratio', 'EPS', 'ROE', 'Sales_Growth']].iloc[0] if 'PE_Ratio' in last_row.columns else pd.Series()
         
-        if prediction_log_return > 0:
-            print("Recommendation: BUY (Predicted increase)")
-        else:
-            print("Recommendation: SELL/HOLD (Predicted decrease)")
+        generate_prescriptive_analysis(
+            TICKER, 
+            last_close,
+            predicted_price,
+            fund_data
+        )
         
         logger.info("Pipeline completed successfully.")
         
