@@ -1,6 +1,8 @@
 import logging
 import yfinance as yf
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg') # Set non-interactive backend to prevent GTK warnings
 import matplotlib.pyplot as plt
 from typing import Optional
 
